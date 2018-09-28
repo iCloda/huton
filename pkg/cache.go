@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/couchbase/moss"
-	"github.com/huton-io/huton/pkg/proto"
+	proto "github.com/golang/protobuf/proto"
 )
 
 const (
@@ -21,7 +21,7 @@ var (
 // Cache is an in-memory key-value store.
 type Cache struct {
 	name       string
-	instance   *Instance
+	cgroup     consensusGroup
 	collection moss.Collection
 }
 
@@ -32,19 +32,27 @@ func (c *Cache) Name() string {
 
 // Set sets the value for the given key. An error is returned if the value could not be set.
 func (c *Cache) Set(key []byte, val []byte) error {
-	return c.instance.sendRPCToLeader(context.Background(), &huton_proto.CacheSet{
+	data, err := proto.Marshal(&CacheSet{
 		CacheName: c.name,
 		Key:       key,
 		Value:     val,
 	})
+	if err != nil {
+		return err
+	}
+	return c.cgroup.Propose(context.Background(), data)
 }
 
 // Delete deletes the value for the given key. An error is returned if the value could not be deleted.
 func (c *Cache) Delete(key []byte) error {
-	return c.instance.sendRPCToLeader(context.Background(), &huton_proto.CacheDel{
+	data, err := proto.Marshal(&CacheDel{
 		CacheName: c.name,
 		Key:       key,
 	})
+	if err != nil {
+		return err
+	}
+	return c.cgroup.Propose(context.Background(), data)
 }
 
 // Get retrieves the value for the given key. An error is returned if something goes wrong while retrieving the value.
@@ -79,14 +87,14 @@ func (c *Cache) executeDelete(key []byte) error {
 	return c.collection.ExecuteBatch(batch, moss.WriteOptions{})
 }
 
-func newCache(name string, inst *Instance) (*Cache, error) {
+func newCache(name string, cgroup consensusGroup) (*Cache, error) {
 	col, err := moss.NewCollection(moss.CollectionOptions{})
 	if err != nil {
 		return nil, err
 	}
 	c := &Cache{
 		name:       name,
-		instance:   inst,
+		cgroup:     cgroup,
 		collection: col,
 	}
 	err = c.collection.Start()

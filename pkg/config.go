@@ -4,30 +4,29 @@ import (
 	"crypto/tls"
 	"io"
 	"time"
+
+	"github.com/huton-io/huton/pkg/swarm"
 )
 
 // Config is a structure used to configure a hunton.Instance.
 type Config struct {
 	// BindHost is the host that the cluster will bind to.
+	// The default is 127.0.0.1.
 	BindHost string
 	// BindPort is the base port that the cluster will bind to.
 	// This port will be binded by the serf cluster in particular,
-	// while BindPort+1 will be bound to by the raft cluster, and
-	// BindPort+2 will be bound to by the RPC server.
+	// The default is 56652.
 	BindPort int
-	// Bootstrap is used to force the cluster to bootstrap the node.
-	// This is useful if you wish to create a single node server for testing.
-	// It is not recommended to enable this in production.
-	Bootstrap bool
-	// Expect is the expected number of initial nodes in the cluster. The cluster
-	// will wait for this number of nodes to be available before the cluster is
-	// started and usable. This must be at least 3. Bootstrap will override this setting.
-	// The default is 3.
-	Expect int
+	// RPCPort is the port that the RPC server will be bound to.
+	// The default is 56653.
+	RPCPort int
+	// Members is a list of addresses of all the members of the cluster.
+	// Each member should be in the form <ip>:<port>
+	Members []string
 	// LogOutput is an io.Writer used for logging. This defaults to stdout.
 	LogOutput io.Writer
 	// Replication is the configuration used for Raft replication.
-	Replication RaftConfig
+	Replication swarm.RaftConfig
 	// SerfEncryptionKey is an optional symmetric key used to encrypt Serf traffic between nodes.
 	// If no key is provided, encryption will be disabled.
 	SerfEncryptionKey []byte

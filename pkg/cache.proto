@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package huton_proto;
+package huton;
 
 message CacheSet {
     string cache_name = 1;
