@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package swarm;
+
+import "go.etcd.io/etcd/raft/raftpb/raft.proto";
+
+message EmptyResponse {
+
+}
+
+service RaftTransport {
+    rpc Send(raftpb.Message) returns (EmptyResponse) {}
+}
