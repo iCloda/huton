@@ -65,10 +65,10 @@ func (cg *RaftGroup) Start(peers []string) error {
 	peerList := make([]raft.Peer, len(peers))
 	for i, peer := range peers {
 		id := HashPeer(peer)
-		peerList[i] = raft.Peer{ID: id}
-		if err := cg.config.Transport.AddPeer(peer, id); err != nil {
-			return err
-		}
+		peerList[i] = raft.Peer{ID: id, Context: []byte(peer)}
+		// if err := cg.config.Transport.AddPeer(peer, id); err != nil {
+		// 	return err
+		// }
 	}
 	cg.raft = raft.StartNode(raftConfig, peerList)
 	go cg.serveRaft()
@@ -79,15 +79,16 @@ func (cg *RaftGroup) Start(peers []string) error {
 // Stop forces raft processing to quit. Once this is called, the RaftGroup
 //is no longer valid. A a restart is necessary, a new RaftGroup should be created.
 func (cg *RaftGroup) Stop() error {
+	fmt.Println("shutting down raft")
 	if cg.raft == nil {
 		return nil
-	}
-	if err := cg.removeSelf(); err != nil {
-		return err
 	}
 	// Wait up to 5 seconds for our node to be removed from the raft cluster.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelFunc()
+	if err := cg.removeSelf(ctx); err != nil {
+		return err
+	}
 	select {
 	case <-ctx.Done():
 		fmt.Println("ctx done: ", ctx.Err())
@@ -118,16 +119,12 @@ func (cg *RaftGroup) Started() bool {
 // AddPeer proposes a new peer to the raft group.
 func (cg *RaftGroup) AddPeer(peer string) error {
 	id := HashPeer(peer)
-	// if err := cg.config.Transport.AddPeer(peer, id); err != nil {
-	// 	return err
-	// }
-	// return cg.raft.ProposeConfChange(context.Background(), raftpb.ConfChange{
-	// 	ID:      id,
-	// 	Type:    raftpb.ConfChangeAddNode,
-	// 	NodeID:  id,
-	// 	Context: []byte(peer),
-	// })
-	return cg.config.Transport.AddPeer(peer, id)
+	return cg.raft.ProposeConfChange(context.Background(), raftpb.ConfChange{
+		ID:      id,
+		Type:    raftpb.ConfChangeAddNode,
+		NodeID:  id,
+		Context: []byte(peer),
+	})
 }
 
 // RemovePeer proposes that a peer be removed from the raft group.
@@ -179,13 +176,19 @@ func (cg *RaftGroup) serveRaft() {
 					var cc raftpb.ConfChange
 					cc.Unmarshal(entry.Data)
 					cg.raft.ApplyConfChange(cc)
-					if cc.Type == raftpb.ConfChangeRemoveNode {
+					switch cc.Type {
+					case raftpb.ConfChangeRemoveNode:
 						if err := transport.RemovePeer(cc.NodeID); err != nil {
-							fmt.Println("failed to remove transport peer")
+							fmt.Println("failed to remove peer", err)
+							// TODO: Log err
 						}
 						if cc.NodeID == cg.id {
-							fmt.Println("removing our node")
+							fmt.Println("removed ourself")
 							close(cg.removedCh)
+						}
+					case raftpb.ConfChangeAddNode:
+						if err := transport.AddPeer(string(cc.Context), cc.NodeID); err != nil {
+							// TODO: Log err
 						}
 					}
 				}
@@ -215,8 +218,8 @@ func (cg *RaftGroup) store(hardState raftpb.HardState, entries []raftpb.Entry, s
 	}
 }
 
-func (cg *RaftGroup) removeSelf() error {
-	return cg.raft.ProposeConfChange(context.Background(), raftpb.ConfChange{
+func (cg *RaftGroup) removeSelf(ctx context.Context) error {
+	return cg.raft.ProposeConfChange(ctx, raftpb.ConfChange{
 		Type:   raftpb.ConfChangeRemoveNode,
 		NodeID: cg.id,
 	})

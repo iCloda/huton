@@ -31,6 +31,9 @@ func (t *GRPCTransport) AddPeer(peer string, id uint64) error {
 	defer t.connsMu.Unlock()
 	if _, ok := t.conns[id]; !ok {
 		t.conns[id] = conn
+		fmt.Println("peer added")
+	} else {
+		fmt.Println("peer already exists")
 	}
 	return nil
 }
@@ -44,6 +47,9 @@ func (t *GRPCTransport) RemovePeer(id uint64) error {
 			return err
 		}
 		delete(t.conns, id)
+		fmt.Println("peer removed")
+	} else {
+		fmt.Println("no peer")
 	}
 	return nil
 }
@@ -58,10 +64,10 @@ func (t *GRPCTransport) Send(ctx context.Context, messages []raftpb.Message) err
 			client := NewRaftTransportClient(conn)
 			// The response is always going to be empty, so we don't really care about the response.
 			if _, err := client.Send(ctx, &msg); err != nil {
-				// fmt.Println("failed to send: ", err)
+				fmt.Println("failed to send: ", err)
 			}
 		} else {
-			// fmt.Println("no conn")
+			fmt.Println("no peer")
 		}
 	}
 	return nil

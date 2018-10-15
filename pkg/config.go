@@ -20,15 +20,9 @@ type Config struct {
 	// RPCPort is the port that the RPC server will be bound to.
 	// The default is 56653.
 	RPCPort int
-	// Bootstrap is used to force the cluster to bootstrap the node.
-	// This is useful if you wish to create a single node server for testing.
-	// It is not recommended to enable this in production.
-	Bootstrap bool
-	// Expect is the expected number of initial nodes in the cluster. The cluster
-	// will wait for this number of nodes to be available before the cluster is
-	// started and usable. This must be at least 3. Bootstrap will override this setting.
-	// The default is 3.
-	Expect int
+	// Members is a list of addresses of all the members of the cluster.
+	// Each member should be in the form <ip>:<port>
+	Members []string
 	// LogOutput is an io.Writer used for logging. This defaults to stdout.
 	LogOutput io.Writer
 	// Replication is the configuration used for Raft replication.

@@ -64,11 +64,6 @@ func (c *cmd) run() int {
 		c.UI.Error(err.Error())
 		return 1
 	}
-	_, err = c.instance.Join(c.conf.peers)
-	if err != nil {
-		c.UI.Error(err.Error())
-		return 1
-	}
 	http.HandleFunc("/", handler(c.instance))
 	go http.ListenAndServe(c.conf.http, nil)
 	return c.handleSignals()

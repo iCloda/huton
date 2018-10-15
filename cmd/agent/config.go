@@ -12,24 +12,21 @@ import (
 )
 
 type config struct {
-	http            string
-	bindAddr        string
-	bindPort        int
-	bootstrap       bool
-	bootstrapExpect int
-	encryptionKey   string
-	certFile        string
-	keyFile         string
-	caFile          string
-	peers           []string
+	http          string
+	bindAddr      string
+	bindPort      int
+	encryptionKey string
+	certFile      string
+	keyFile       string
+	caFile        string
+	peers         []string
 }
 
 func (c config) parse() (huton.Config, error) {
 	hutonConfig := huton.Config{
-		BindHost:  c.bindAddr,
-		BindPort:  c.bindPort,
-		Bootstrap: c.bootstrap,
-		Expect:    c.bootstrapExpect,
+		BindHost: c.bindAddr,
+		BindPort: c.bindPort,
+		Members:  c.peers,
 	}
 	if c.encryptionKey != "" {
 		b, err := base64.StdEncoding.DecodeString(c.encryptionKey)
@@ -46,8 +43,6 @@ func addFlags(fs *flag.FlagSet) *config {
 	fs.StringVar(&c.bindAddr, "bindAddr", "127.0.0.1", "address to bind serf to")
 	fs.StringVar(&c.http, "http", "127.0.0.1:8080", "http address")
 	fs.IntVar(&c.bindPort, "bindPort", -1, "port to bind serf to")
-	fs.BoolVar(&c.bootstrap, "bootstrap", false, "bootstrap mode")
-	fs.IntVar(&c.bootstrapExpect, "expect", 3, "bootstrap expect")
 	fs.StringVar(&c.encryptionKey, "encrypt", "", "base64 encoded encryption key")
 	fs.Var((*flags.StringSlice)(&c.peers), "peers", "peer list")
 	return &c

@@ -70,11 +70,6 @@ func (i *Instance) Cache(name string) (*Cache, error) {
 	return dc, nil
 }
 
-// Join joins and existing cluster.
-func (i *Instance) Join(addrs []string) (int, error) {
-	return i.serf.Join(addrs, true)
-}
-
 // Shutdown forcefully shuts down the instance.
 func (i *Instance) Shutdown() error {
 	// i.logger.Println("[INFO] Shutting down instance...")
@@ -85,9 +80,6 @@ func (i *Instance) Shutdown() error {
 	}
 	i.shutdown = true
 	close(i.shutdownCh)
-	if i.serf != nil {
-		i.serf.Shutdown()
-	}
 	return i.cgroup.Stop()
 }
 
@@ -105,33 +97,41 @@ func NewInstance(config Config) (*Instance, error) {
 		errCh:            make(chan error, 256),
 		readyCh:          make(chan struct{}, 1),
 	}
-	i.ensureConfig()
-	rpcAddr := net.JoinHostPort(i.config.BindHost, strconv.Itoa(i.config.BindPort+2))
+	if err := i.ensureConfig(); err != nil {
+		return nil, err
+	}
+	rpcAddr := net.JoinHostPort(i.config.BindHost, strconv.Itoa(i.config.BindPort))
 	raftGroup := swarm.NewRaftGroup(rpcAddr, i.config.Replication, i)
 	i.cgroup = raftGroup
-	// i.logger.Println("[INFO] Initializing RPC server at address ", rpcAddr)
+	i.logger.Println("[INFO] Initializing RPC server at address ", rpcAddr)
 	if err := i.setupRPC(rpcAddr, raftGroup); err != nil {
 		i.Shutdown()
 		return nil, err
 	}
-	// i.logger.Println("[INFO] Initializing Serf cluster...")
-	if err := i.setupSerf(rpcAddr); err != nil {
+	i.logger.Println("[INFO] Initializing Raft layer")
+	if err := raftGroup.Start(i.config.Members); err != nil {
 		i.Shutdown()
-		return i, err
+		return nil, err
 	}
 	go i.handleEvents()
 	return i, nil
 }
 
-func (i *Instance) ensureConfig() {
+func (i *Instance) ensureConfig() error {
+	if len(i.config.Members) <= 0 {
+		return errors.New("must provide at least 1 member")
+	}
 	if i.config.BindHost == "" {
 		i.config.BindHost = "127.0.0.1"
 	}
 	if i.config.LogOutput == nil {
 		i.config.LogOutput = os.Stdout
 	}
-	if i.config.Expect < 3 {
-		i.config.Expect = 3
+	if i.config.Replication.Transport == nil {
+		i.config.Replication.Transport = swarm.NewGRPCTransport()
+	}
+	if i.config.Replication.TickInterval == 0 {
+		i.config.Replication.TickInterval = time.Second
 	}
 	if i.config.Replication.Transport == nil {
 		i.config.Replication.Transport = swarm.NewGRPCTransport()
@@ -140,15 +140,12 @@ func (i *Instance) ensureConfig() {
 		i.config.Replication.TickInterval = time.Second
 	}
 	i.logger = log.New(os.Stdout, "huton", log.LstdFlags)
+	return nil
 }
 
 func (i *Instance) handleEvents() {
 	for {
 		select {
-		case e := <-i.serfEventChannel:
-			i.handleSerfEvent(e)
-		case <-i.shutdownCh:
-			return
 		case err := <-i.errCh:
 			i.logger.Printf("[ERR] %s", err)
 		case <-i.shutdownCh:
